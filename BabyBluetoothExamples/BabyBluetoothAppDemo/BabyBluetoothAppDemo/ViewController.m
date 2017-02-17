@@ -67,7 +67,9 @@
     //设置扫描到设备的委托
     [baby setBlockOnDiscoverToPeripherals:^(CBCentralManager *central, CBPeripheral *peripheral, NSDictionary *advertisementData, NSNumber *RSSI) {
         NSLog(@"搜索到了设备:%@",peripheral.name);
-        [weakSelf insertTableView:peripheral advertisementData:advertisementData RSSI:RSSI];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf insertTableView:peripheral advertisementData:advertisementData RSSI:RSSI];
+        });
     }];
     
    

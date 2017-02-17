@@ -37,7 +37,8 @@
         NSArray *backgroundModes = [[[NSBundle mainBundle] infoDictionary]objectForKey:@"UIBackgroundModes"];
         if ([backgroundModes containsObject:@"bluetooth-central"]) {
             //后台模式
-            centralManager = [[CBCentralManager alloc]initWithDelegate:self queue:nil options:options];
+            dispatch_queue_t bluetoothQ = dispatch_queue_create("MyBluetoothQueueSerial", DISPATCH_QUEUE_SERIAL_WITH_AUTORELEASE_POOL);
+            centralManager = [[CBCentralManager alloc]initWithDelegate:self queue:bluetoothQ options:options];
         }
         else {
             //非后台模式
