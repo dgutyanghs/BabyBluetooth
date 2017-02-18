@@ -56,9 +56,7 @@ typedef NS_ENUM(NSUInteger, BabySpeakerType) {
 
 - (BabyCallback *)callbackOnChnnel:(NSString *)channel {
     if (!channel) {
-        dispatch_async(dispatch_get_main_queue(), ^{
             [self callback];
-        });
     }
     return [channels objectForKey:channel];
 }

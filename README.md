@@ -212,7 +212,7 @@ step2:导入.h文件
 
 
 # 后期更新
- 
+- 因为蓝牙在自定义的serial队列运行， 在它的回调函数添加GCD，切换回main thread，方便用户更新UI等。
 - 增加对Carthage Install的支持
 - [swift版本开发,目前项目已经兼容swift，详细见这里](https://github.com/coolnameismy/BabyBluetooth-swift)
 
