@@ -35,14 +35,19 @@
 #endif
         
         NSArray *backgroundModes = [[[NSBundle mainBundle] infoDictionary]objectForKey:@"UIBackgroundModes"];
+        
+        /**
+         为蓝牙创建单独的serial queue， 能获得更好的响应性能。
+         */
+        dispatch_queue_t bluetoothQ = dispatch_queue_create("MyBluetoothQueueSerial", DISPATCH_QUEUE_SERIAL_WITH_AUTORELEASE_POOL);
+        
         if ([backgroundModes containsObject:@"bluetooth-central"]) {
             //后台模式
-            dispatch_queue_t bluetoothQ = dispatch_queue_create("MyBluetoothQueueSerial", DISPATCH_QUEUE_SERIAL_WITH_AUTORELEASE_POOL);
             centralManager = [[CBCentralManager alloc]initWithDelegate:self queue:bluetoothQ options:options];
         }
         else {
             //非后台模式
-            centralManager = [[CBCentralManager alloc]initWithDelegate:self queue:nil];
+            centralManager = [[CBCentralManager alloc]initWithDelegate:self queue:bluetoothQ];
         }
         
         //pocket
@@ -123,7 +128,9 @@
     }
     //状态改变callback
     if ([currChannel blockOnCentralManagerDidUpdateState]) {
-        [currChannel blockOnCentralManagerDidUpdateState](central);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [currChannel blockOnCentralManagerDidUpdateState](central);
+        });
     }
 }
 
@@ -141,23 +148,25 @@
     //发出通知
     [[NSNotificationCenter defaultCenter]postNotificationName:BabyNotificationAtDidDiscoverPeripheral
                                                        object:@{@"central":central,@"peripheral":peripheral,@"advertisementData":advertisementData,@"RSSI":RSSI}];
-    //扫描到设备callback
-    if ([currChannel filterOnDiscoverPeripherals]) {
-        if ([currChannel filterOnDiscoverPeripherals](peripheral.name,advertisementData,RSSI)) {
-            if ([currChannel blockOnDiscoverPeripherals]) {
-                [[babySpeaker callbackOnCurrChannel] blockOnDiscoverPeripherals](central,peripheral,advertisementData,RSSI);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        //扫描到设备callback
+        if ([currChannel filterOnDiscoverPeripherals]) {
+            if ([currChannel filterOnDiscoverPeripherals](peripheral.name,advertisementData,RSSI)) {
+                if ([currChannel blockOnDiscoverPeripherals]) {
+                    [[babySpeaker callbackOnCurrChannel] blockOnDiscoverPeripherals](central,peripheral,advertisementData,RSSI);
+                }
             }
         }
-    }
-    
-    //处理连接设备
-    if (needConnectPeripheral) {
-        if ([currChannel filterOnconnectToPeripherals](peripheral.name,advertisementData,RSSI)) {
-            [centralManager connectPeripheral:peripheral options:[currChannel babyOptions].connectPeripheralWithOptions];
-            //开一个定时器监控连接超时的情况
-            connectTimer = [NSTimer scheduledTimerWithTimeInterval:5.0f target:self selector:@selector(disconnect:) userInfo:peripheral repeats:NO];
+        
+        //处理连接设备
+        if (needConnectPeripheral) {
+            if ([currChannel filterOnconnectToPeripherals](peripheral.name,advertisementData,RSSI)) {
+                [centralManager connectPeripheral:peripheral options:[currChannel babyOptions].connectPeripheralWithOptions];
+                //开一个定时器监控连接超时的情况
+                connectTimer = [NSTimer scheduledTimerWithTimeInterval:5.0f target:self selector:@selector(disconnect:) userInfo:peripheral repeats:NO];
+            }
         }
-    }
+    });
 }
 
 //停止扫描
@@ -181,15 +190,17 @@
     
     //执行回叫
     //扫描到设备callback
-    if ([currChannel blockOnConnectedPeripheral]) {
-        [currChannel blockOnConnectedPeripheral](central,peripheral);
-    }
-    
-    //扫描外设的服务
-    if (needDiscoverServices) {
-        [peripheral discoverServices:[currChannel babyOptions].discoverWithServices];
-        //discoverIncludedServices
-    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([currChannel blockOnConnectedPeripheral]) {
+            [currChannel blockOnConnectedPeripheral](central,peripheral);
+        }
+        
+        //扫描外设的服务
+        if (needDiscoverServices) {
+            [peripheral discoverServices:[currChannel babyOptions].discoverWithServices];
+            //discoverIncludedServices
+        }
+    });
     
 }
 
@@ -199,10 +210,12 @@
     [[NSNotificationCenter defaultCenter]postNotificationName:BabyNotificationAtDidFailToConnectPeripheral
                                                        object:@{@"central":central,@"peripheral":peripheral,@"error":error?error:@""}];
  
-    //    BabyLog(@">>>连接到名称为（%@）的设备-失败,原因:%@",[peripheral name],[error localizedDescription]);
-    if ([currChannel blockOnFailToConnect]) {
-        [currChannel blockOnFailToConnect](central,peripheral,error);
-    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        //    BabyLog(@">>>连接到名称为（%@）的设备-失败,原因:%@",[peripheral name],[error localizedDescription]);
+        if ([currChannel blockOnFailToConnect]) {
+            [currChannel blockOnFailToConnect](central,peripheral,error);
+        }
+    });
 }
 
 //Peripherals断开连接
@@ -218,23 +231,28 @@
     }
     
     [self deletePeripheral:peripheral];
-    if ([currChannel blockOnDisconnect]) {
-        [currChannel blockOnDisconnect](central,peripheral,error);
-    }
     
-    //判断是否全部链接都已经段开,调用blockOnCancelAllPeripheralsConnection委托
-    if ([self findConnectedPeripherals].count == 0) {
-        //停止扫描callback
-        if ([currChannel blockOnCancelAllPeripheralsConnection]) {
-            [currChannel blockOnCancelAllPeripheralsConnection](centralManager);
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([currChannel blockOnDisconnect]) {
+            [currChannel blockOnDisconnect](central,peripheral,error);
         }
-        //    BabyLog(@">>> stopConnectAllPerihperals");
-    }
-    
-    //检查并重新连接需要重连的设备
-    if ([reConnectPeripherals containsObject:peripheral]) {
-        [self connectToPeripheral:peripheral];
-    }
+        
+        //判断是否全部链接都已经段开,调用blockOnCancelAllPeripheralsConnection委托
+        if ([self findConnectedPeripherals].count == 0) {
+            //停止扫描callback
+            if ([currChannel blockOnCancelAllPeripheralsConnection]) {
+                    [currChannel blockOnCancelAllPeripheralsConnection](centralManager);
+            }
+            //    BabyLog(@">>> stopConnectAllPerihperals");
+        }
+        
+        //检查并重新连接需要重连的设备
+        if ([reConnectPeripherals containsObject:peripheral]) {
+            [self connectToPeripheral:peripheral];
+        }
+        
+    });
 }
 
 //扫描到服务
@@ -248,17 +266,19 @@
     if (error) {
         BabyLog(@">>>didDiscoverServices for %@ with error: %@", peripheral.name, [error localizedDescription]);
     }
-    //回叫block
-    if ([currChannel blockOnDiscoverServices]) {
-        [currChannel blockOnDiscoverServices](peripheral,error);
-    }
-    
-    //discover characteristics
-    if (needDiscoverCharacteristics) {
-        for (CBService *service in peripheral.services) {
-            [peripheral discoverCharacteristics:[currChannel babyOptions].discoverWithCharacteristics forService:service];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        //回叫block
+        if ([currChannel blockOnDiscoverServices]) {
+            [currChannel blockOnDiscoverServices](peripheral,error);
         }
-    }
+        
+        //discover characteristics
+        if (needDiscoverCharacteristics) {
+            for (CBService *service in peripheral.services) {
+                [peripheral discoverCharacteristics:[currChannel babyOptions].discoverWithCharacteristics forService:service];
+            }
+        }
+    });
 }
 
 //发现服务的Characteristics
@@ -273,28 +293,32 @@
         BabyLog(@"error didDiscoverCharacteristicsForService for %@ with error: %@", service.UUID, [error localizedDescription]);
         //        return;
     }
-    //回叫block
-    if ([currChannel blockOnDiscoverCharacteristics]) {
-        [currChannel blockOnDiscoverCharacteristics](peripheral,service,error);
-    }
     
-    //如果需要更新Characteristic的值
-    if (needReadValueForCharacteristic) {
-        for (CBCharacteristic *characteristic in service.characteristics) {
-            [peripheral readValueForCharacteristic:characteristic];
-            //判断读写权限
-            //            if (characteristic.properties & CBCharacteristicPropertyRead ) {
-            //                [peripheral readValueForCharacteristic:characteristic];
-            //            }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        //回叫block
+        if ([currChannel blockOnDiscoverCharacteristics]) {
+            [currChannel blockOnDiscoverCharacteristics](peripheral,service,error);
         }
-    }
-    
-    //如果搜索Characteristic的Descriptors
-    if (needDiscoverDescriptorsForCharacteristic) {
-        for (CBCharacteristic *characteristic in service.characteristics) {
-            [peripheral discoverDescriptorsForCharacteristic:characteristic];
+        
+        //如果需要更新Characteristic的值
+        if (needReadValueForCharacteristic) {
+            for (CBCharacteristic *characteristic in service.characteristics) {
+                [peripheral readValueForCharacteristic:characteristic];
+                //判断读写权限
+                //            if (characteristic.properties & CBCharacteristicPropertyRead ) {
+                //                [peripheral readValueForCharacteristic:characteristic];
+                //            }
+            }
         }
-    }
+        
+        //如果搜索Characteristic的Descriptors
+        if (needDiscoverDescriptorsForCharacteristic) {
+            for (CBCharacteristic *characteristic in service.characteristics) {
+                [peripheral discoverDescriptorsForCharacteristic:characteristic];
+            }
+        }
+        
+    });
 }
 
 //读取Characteristics的值

@@ -70,35 +70,27 @@
     
     //设置设备连接成功的委托,同一个baby对象，使用不同的channel切换委托回调
     [baby setBlockOnConnectedAtChannel:channelOnPeropheralView block:^(CBCentralManager *central, CBPeripheral *peripheral) {
-        dispatch_async(dispatch_get_main_queue(), ^{
             [SVProgressHUD showInfoWithStatus:[NSString stringWithFormat:@"设备：%@--连接成功",peripheral.name]];
             
-        });
     }];
     
     //设置设备连接失败的委托
     [baby setBlockOnFailToConnectAtChannel:channelOnPeropheralView block:^(CBCentralManager *central, CBPeripheral *peripheral, NSError *error) {
         NSLog(@"设备：%@--连接失败",peripheral.name);
-        dispatch_async(dispatch_get_main_queue(), ^{
             [SVProgressHUD showInfoWithStatus:[NSString stringWithFormat:@"设备：%@--连接失败",peripheral.name]];
-        });
     }];
 
     //设置设备断开连接的委托
     [baby setBlockOnDisconnectAtChannel:channelOnPeropheralView block:^(CBCentralManager *central, CBPeripheral *peripheral, NSError *error) {
         NSLog(@"设备：%@--断开连接",peripheral.name);
-        dispatch_async(dispatch_get_main_queue(), ^{
             [SVProgressHUD showInfoWithStatus:[NSString stringWithFormat:@"设备：%@--断开失败",peripheral.name]];
-        });
     }];
     
     //设置发现设备的Services的委托
     [baby setBlockOnDiscoverServicesAtChannel:channelOnPeropheralView block:^(CBPeripheral *peripheral, NSError *error) {
         for (CBService *s in peripheral.services) {
             ///插入section到tableview
-            dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf insertSectionToTableView:s];
-            });
         }
         
         [rhythm beats];
@@ -107,9 +99,7 @@
     [baby setBlockOnDiscoverCharacteristicsAtChannel:channelOnPeropheralView block:^(CBPeripheral *peripheral, CBService *service, NSError *error) {
         NSLog(@"===service name:%@",service.UUID);
         //插入row到tableview
-        dispatch_async(dispatch_get_main_queue(), ^{
             [weakSelf insertRowToTableView:service];
-        });
         
     }];
     //设置读取characteristics的委托
